@@ -5,7 +5,10 @@ import psycopg2
 
 
 def get_conn():
-    return psycopg2.connect(os.environ["DATABASE_URL"])
+    schema = os.environ.get("MAIN_DB_SCHEMA", "public")
+    dsn = os.environ["DATABASE_URL"]
+    conn = psycopg2.connect(dsn, options=f"-c search_path={schema}")
+    return conn
 
 
 def handler(event: dict, context) -> dict:

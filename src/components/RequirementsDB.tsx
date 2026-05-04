@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { fetchRequirements, createRequirement, DBRequirementAPI } from '@/api/client';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { fetchRequirements, createRequirement, importRequirementsFile, readFileAsBase64, DBRequirementAPI } from '@/api/client';
 import Icon from '@/components/ui/icon';
 
 interface ReqFormData {
@@ -34,6 +34,10 @@ export default function RequirementsDB() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<ReqFormData>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{ imported: number; skipped: number } | null>(null);
+  const [importMode, setImportMode] = useState<'append' | 'replace'>('append');
+  const importRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -66,10 +70,23 @@ export default function RequirementsDB() {
     setSaving(false);
   };
 
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    setImportResult(null);
+    const b64 = await readFileAsBase64(file);
+    const result = await importRequirementsFile(file.name, b64, importMode);
+    setImportResult({ imported: result.imported, skipped: result.skipped });
+    await load();
+    setImporting(false);
+    if (importRef.current) importRef.current.value = '';
+  };
+
   const productCount = (p: string) => items.filter(r => r.product === p).length;
 
   return (
-    <div className="flex gap-5 h-[460px]">
+    <div className="flex gap-5 h-[520px]">
       <div className="w-52 shrink-0 flex flex-col gap-1">
         <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-2">Продукты</p>
         {loading && products.length === 0 ? (
@@ -133,6 +150,49 @@ export default function RequirementsDB() {
             <Icon name={showForm ? 'X' : 'Plus'} size={14} />
             {showForm ? 'Отмена' : 'Добавить'}
           </button>
+          <button
+            onClick={() => importRef.current?.click()}
+            disabled={importing}
+            className="flex items-center gap-2 px-3 py-2 text-sm border border-[hsl(var(--almi-blue))] text-[hsl(var(--almi-blue))] bg-white rounded-md hover:bg-sky-50 transition-colors disabled:opacity-60"
+            title="Импортировать XLSX/CSV"
+          >
+            <Icon name={importing ? 'Loader' : 'FileUp'} size={14} className={importing ? 'animate-spin' : ''} />
+            {importing ? 'Импорт...' : 'Импорт XLSX'}
+          </button>
+          <input
+            ref={importRef}
+            type="file"
+            accept=".xlsx,.xls,.csv,.tsv,.ods"
+            className="hidden"
+            onChange={handleImport}
+          />
+        </div>
+
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+            <input
+              type="radio"
+              checked={importMode === 'append'}
+              onChange={() => setImportMode('append')}
+              className="accent-[hsl(var(--almi-navy))]"
+            />
+            Добавить к существующим
+          </label>
+          <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+            <input
+              type="radio"
+              checked={importMode === 'replace'}
+              onChange={() => setImportMode('replace')}
+              className="accent-red-500"
+            />
+            Заменить всю базу
+          </label>
+          {importResult && (
+            <div className="ml-auto flex items-center gap-1.5 text-xs text-green-700 bg-green-50 border border-green-200 px-3 py-1 rounded-md animate-fade-in">
+              <Icon name="CheckCircle2" size={13} />
+              Импортировано: {importResult.imported} · Пропущено: {importResult.skipped}
+            </div>
+          )}
         </div>
 
         {showForm && (

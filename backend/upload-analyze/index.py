@@ -8,7 +8,9 @@ import boto3
 
 
 def get_conn():
-    return psycopg2.connect(os.environ["DATABASE_URL"])
+    schema = os.environ.get("MAIN_DB_SCHEMA", "public")
+    conn = psycopg2.connect(os.environ["DATABASE_URL"], options=f"-c search_path={schema}")
+    return conn
 
 
 def get_s3():

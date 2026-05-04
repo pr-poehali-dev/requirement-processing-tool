@@ -3,6 +3,7 @@ const URLS = {
   uploadAnalyze: "https://functions.poehali.dev/5b993126-43ca-42ba-952a-5cd686234a40",
   analysisResults: "https://functions.poehali.dev/51c18e84-185b-4b42-a2bc-eb8147c8fbac",
   exportXlsx: "https://functions.poehali.dev/a14705a9-a065-4f43-8234-e82c517b0c77",
+  importRequirements: "https://functions.poehali.dev/5fa5ea37-17ec-4297-9c34-bf1b0f5307e8",
 };
 
 export interface DBRequirementAPI {
@@ -204,4 +205,17 @@ export function extractRequirementsFromText(text: string): string[] {
   }
   if (buffer.trim().length > 20) reqs.push(buffer.trim());
   return reqs.filter((r) => r.length > 10).slice(0, 500);
+}
+
+export async function importRequirementsFile(
+  fileName: string,
+  fileBase64: string,
+  mode: "append" | "replace" = "append"
+): Promise<{ imported: number; skipped: number; total_rows: number; mode: string }> {
+  const r = await fetch(URLS.importRequirements, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ file_name: fileName, file_data: fileBase64, mode }),
+  });
+  return r.json();
 }

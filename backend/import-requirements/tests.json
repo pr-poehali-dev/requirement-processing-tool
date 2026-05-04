@@ -1,0 +1,13 @@
+{
+  "tests": [
+    {
+      "name": "Import without file returns 400",
+      "method": "POST",
+      "path": "/",
+      "body": {"file_name": "test.xlsx"},
+      "expectedStatus": 400,
+      "expectedBody": {"error": "file_data required"},
+      "bodyMatcher": "partial"
+    }
+  ]
+}
