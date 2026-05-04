@@ -1,0 +1,13 @@
+{
+  "tests": [
+    {
+      "name": "Analyze empty requirements list",
+      "method": "POST",
+      "path": "/",
+      "body": {"file_name": "test.txt", "requirements": []},
+      "expectedStatus": 200,
+      "expectedBody": {"results": [], "stats": {}},
+      "bodyMatcher": "partial"
+    }
+  ]
+}

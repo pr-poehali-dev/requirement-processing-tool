@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { mockResults, Requirement } from '@/data/mockData';
+import { AnalysisResult, patchAnalysisResult, exportToXlsx } from '@/api/client';
 import UploadSection from '@/components/UploadSection';
 import ResultsTable from '@/components/ResultsTable';
 import ManualReview from '@/components/ManualReview';
@@ -17,42 +17,48 @@ const NAV_ITEMS: { id: Tab; label: string; icon: string }[] = [
 
 export default function Index() {
   const [activeTab, setActiveTab] = useState<Tab>('upload');
-  const [requirements, setRequirements] = useState<Requirement[]>([]);
-  const [selectedReq, setSelectedReq] = useState<Requirement | null>(null);
+  const [results, setResults] = useState<AnalysisResult[]>([]);
+  const [sessionId, setSessionId] = useState<number | null>(null);
+  const [selectedReq, setSelectedReq] = useState<AnalysisResult | null>(null);
   const [hasAnalyzed, setHasAnalyzed] = useState(false);
-  const [analyzing, setAnalyzing] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
-  const handleUpload = (_fileName: string) => {
-    setAnalyzing(true);
-    setTimeout(() => {
-      setRequirements(mockResults);
-      setHasAnalyzed(true);
-      setAnalyzing(false);
-      setActiveTab('results');
-    }, 2400);
+  const handleAnalyzed = (newResults: AnalysisResult[], sid: number) => {
+    setResults(newResults);
+    setSessionId(sid);
+    setHasAnalyzed(true);
+    setActiveTab('results');
   };
 
-  const handleSelectReq = (req: Requirement) => {
+  const handleSelectReq = (req: AnalysisResult) => {
     setSelectedReq(req);
     setActiveTab('review');
   };
 
-  const handleApprove = (id: string, comment: string) => {
-    setRequirements(prev => prev.map(r =>
-      r.id === id ? { ...r, manualChecked: true, comment: comment || r.comment } : r
+  const handleApprove = async (id: string, comment: string) => {
+    await patchAnalysisResult(Number(id), { manual_checked: true, analyst_comment: comment });
+    setResults(prev => prev.map(r =>
+      r.id === Number(id) ? { ...r, manual_checked: true, analyst_comment: comment || r.analyst_comment } : r
     ));
     setSelectedReq(null);
   };
 
-  const handleReject = (id: string, comment: string) => {
-    setRequirements(prev => prev.map(r =>
-      r.id === id ? { ...r, status: 'conflict', comment: comment || 'Отклонено аналитиком' } : r
+  const handleReject = async (id: string, comment: string) => {
+    await patchAnalysisResult(Number(id), { status: 'conflict', analyst_comment: comment || 'Отклонено аналитиком' });
+    setResults(prev => prev.map(r =>
+      r.id === Number(id) ? { ...r, status: 'conflict', analyst_comment: comment || 'Отклонено аналитиком' } : r
     ));
     setSelectedReq(null);
   };
 
-  const matchCount = requirements.filter(r => r.status === 'match').length;
-  const totalCount = requirements.length;
+  const handleExport = async () => {
+    setExporting(true);
+    await exportToXlsx(sessionId ?? undefined);
+    setExporting(false);
+  };
+
+  const matchCount = results.filter(r => r.status === 'match').length;
+  const totalCount = results.length;
   const matchRate = totalCount > 0 ? Math.round((matchCount / totalCount) * 100) : 0;
 
   return (
@@ -86,7 +92,7 @@ export default function Index() {
                     {item.label}
                     {item.id === 'results' && hasAnalyzed && (
                       <span className="bg-[hsl(var(--almi-blue))] text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
-                        {requirements.length}
+                        {results.length}
                       </span>
                     )}
                   </button>
@@ -108,9 +114,13 @@ export default function Index() {
                   </div>
                 </div>
               )}
-              <button className="flex items-center gap-2 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white text-sm rounded-md transition-colors border border-white/20">
-                <Icon name="Download" size={14} />
-                Выгрузить XLSX
+              <button
+                onClick={handleExport}
+                disabled={exporting}
+                className="flex items-center gap-2 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white text-sm rounded-md transition-colors border border-white/20 disabled:opacity-60"
+              >
+                <Icon name={exporting ? 'Loader' : 'Download'} size={14} className={exporting ? 'animate-spin' : ''} />
+                {exporting ? 'Экспорт...' : 'Выгрузить XLSX'}
               </button>
             </div>
           </div>
@@ -128,36 +138,10 @@ export default function Index() {
             </div>
 
             <div className="bg-white rounded-xl border border-border p-6 shadow-sm">
-              <UploadSection onUpload={handleUpload} />
+              <UploadSection onAnalyzed={handleAnalyzed} />
             </div>
 
-            {analyzing && (
-              <div className="mt-4 bg-white rounded-xl border border-border p-5 shadow-sm animate-fade-in">
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-full bg-sky-50 flex items-center justify-center shrink-0">
-                    <svg className="animate-spin w-5 h-5 text-[hsl(var(--almi-blue))]" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-                    </svg>
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-[hsl(var(--almi-navy))]">Анализируем требования...</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">Сравниваем с накопленной базой по компонентам</p>
-                  </div>
-                </div>
-                <div className="mt-4 space-y-2">
-                  {['Извлечение требований из документа', 'Нормализация текста', 'Семантическое сравнение с базой', 'Формирование результатов'].map((step, i) => (
-                    <div key={step} className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <div className={`w-1.5 h-1.5 rounded-full ${i < 2 ? 'bg-green-500' : i === 2 ? 'bg-[hsl(var(--almi-blue))] animate-pulse' : 'bg-slate-200'}`} />
-                      <span className={i < 2 ? 'line-through opacity-50' : ''}>{step}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {!analyzing && (
-              <div className="mt-6 grid grid-cols-3 gap-4">
+            <div className="mt-6 grid grid-cols-3 gap-4">
                 {[
                   { icon: 'Zap', title: 'Автоматическое сравнение', desc: 'Семантический поиск по всей базе требований' },
                   { icon: 'Shield', title: 'Выявление конфликтов', desc: 'Детектируем противоречия с принятыми решениями' },
@@ -172,7 +156,6 @@ export default function Index() {
                   </div>
                 ))}
               </div>
-            )}
           </div>
         )}
 
@@ -186,9 +169,13 @@ export default function Index() {
                 </p>
               </div>
               {hasAnalyzed && (
-                <button className="flex items-center gap-2 px-4 py-2 bg-[hsl(var(--almi-navy))] text-white text-sm font-medium rounded-md hover:bg-[hsl(214,72%,18%)] transition-colors">
-                  <Icon name="Download" size={14} />
-                  Выгрузить XLSX
+                <button
+                  onClick={handleExport}
+                  disabled={exporting}
+                  className="flex items-center gap-2 px-4 py-2 bg-[hsl(var(--almi-navy))] text-white text-sm font-medium rounded-md hover:bg-[hsl(214,72%,18%)] transition-colors disabled:opacity-60"
+                >
+                  <Icon name={exporting ? 'Loader' : 'Download'} size={14} className={exporting ? 'animate-spin' : ''} />
+                  {exporting ? 'Экспорт...' : 'Выгрузить XLSX'}
                 </button>
               )}
             </div>
@@ -199,7 +186,7 @@ export default function Index() {
               </div>
             ) : (
               <div className="bg-white rounded-xl border border-border p-5 shadow-sm">
-                <ResultsTable requirements={requirements} onSelect={handleSelectReq} />
+                <ResultsTable requirements={results} onSelect={handleSelectReq} />
               </div>
             )}
           </div>
@@ -216,7 +203,7 @@ export default function Index() {
                 <div className="bg-white rounded-xl border border-border p-4 shadow-sm">
                   <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">К проверке</p>
                   <div className="space-y-2">
-                    {requirements.filter(r => !r.manualChecked && (r.status === 'partial' || r.status === 'conflict')).map(req => (
+                    {results.filter(r => !r.manual_checked && (r.status === 'partial' || r.status === 'conflict')).map(req => (
                       <button
                         key={req.id}
                         onClick={() => setSelectedReq(req)}
@@ -229,13 +216,13 @@ export default function Index() {
                         <div className="flex items-center justify-between mb-1">
                           <span className="font-mono text-xs text-muted-foreground">{req.code}</span>
                           <span className={`text-xs font-medium ${req.status === 'conflict' ? 'text-red-600' : 'text-yellow-600'}`}>
-                            {req.matchPercent}%
+                            {req.match_percent}%
                           </span>
                         </div>
-                        <p className="text-xs text-foreground line-clamp-2 leading-snug">{req.text}</p>
+                        <p className="text-xs text-foreground line-clamp-2 leading-snug">{req.requirement_text}</p>
                       </button>
                     ))}
-                    {requirements.filter(r => !r.manualChecked && (r.status === 'partial' || r.status === 'conflict')).length === 0 && (
+                    {results.filter(r => !r.manual_checked && (r.status === 'partial' || r.status === 'conflict')).length === 0 && (
                       <div className="text-center py-6 text-sm text-muted-foreground">
                         {hasAnalyzed ? 'Все требования проверены' : 'Сначала загрузите документ'}
                       </div>

@@ -1,27 +1,29 @@
 import { useState } from 'react';
-import { Requirement, RequirementStatus, COMPONENTS } from '@/data/mockData';
+import { AnalysisResult } from '@/api/client';
 import Icon from '@/components/ui/icon';
 
+type Status = 'match' | 'partial' | 'new' | 'conflict';
+
 interface ResultsTableProps {
-  requirements: Requirement[];
-  onSelect: (req: Requirement) => void;
+  requirements: AnalysisResult[];
+  onSelect: (req: AnalysisResult) => void;
 }
 
-const STATUS_LABELS: Record<RequirementStatus, string> = {
+const STATUS_LABELS: Record<Status, string> = {
   match: 'Совпадает',
   partial: 'Частично',
   new: 'Новое',
   conflict: 'Конфликт',
 };
 
-const STATUS_CLASS: Record<RequirementStatus, string> = {
+const STATUS_CLASS: Record<Status, string> = {
   match: 'status-match',
   partial: 'status-partial',
   new: 'status-new',
   conflict: 'status-conflict',
 };
 
-const STATUS_ICON: Record<RequirementStatus, string> = {
+const STATUS_ICON: Record<Status, string> = {
   match: 'CheckCircle2',
   partial: 'AlertCircle',
   new: 'PlusCircle',
@@ -29,14 +31,16 @@ const STATUS_ICON: Record<RequirementStatus, string> = {
 };
 
 export default function ResultsTable({ requirements, onSelect }: ResultsTableProps) {
-  const [filterStatus, setFilterStatus] = useState<RequirementStatus | 'all'>('all');
+  const [filterStatus, setFilterStatus] = useState<Status | 'all'>('all');
   const [filterComponent, setFilterComponent] = useState<string>('all');
   const [search, setSearch] = useState('');
+
+  const components = Array.from(new Set(requirements.map(r => r.component).filter(Boolean)));
 
   const filtered = requirements.filter(r => {
     if (filterStatus !== 'all' && r.status !== filterStatus) return false;
     if (filterComponent !== 'all' && r.component !== filterComponent) return false;
-    if (search && !r.text.toLowerCase().includes(search.toLowerCase()) && !r.code.toLowerCase().includes(search.toLowerCase())) return false;
+    if (search && !r.requirement_text.toLowerCase().includes(search.toLowerCase()) && !r.code.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
 
@@ -87,7 +91,7 @@ export default function ResultsTable({ requirements, onSelect }: ResultsTablePro
           className="text-sm border border-border rounded-md bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[hsl(var(--almi-blue))]/30 text-foreground"
         >
           <option value="all">Все компоненты</option>
-          {COMPONENTS.map(c => <option key={c} value={c}>{c}</option>)}
+          {components.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
       </div>
 
@@ -117,21 +121,21 @@ export default function ResultsTable({ requirements, onSelect }: ResultsTablePro
                 style={{ animationDelay: `${i * 40}ms` }}
               >
                 <td className="px-4 py-3">
-                  <span className="font-mono-ibm text-xs font-medium text-[hsl(var(--almi-slate))]">{req.code}</span>
+                  <span className="font-mono text-xs font-medium text-[hsl(var(--almi-slate))]">{req.code}</span>
                 </td>
                 <td className="px-4 py-3">
-                  <p className="text-foreground leading-snug line-clamp-2">{req.text}</p>
-                  {req.comment && (
-                    <p className="text-xs text-muted-foreground mt-1 italic">{req.comment}</p>
+                  <p className="text-foreground leading-snug line-clamp-2">{req.requirement_text}</p>
+                  {req.analyst_comment && (
+                    <p className="text-xs text-muted-foreground mt-1 italic">{req.analyst_comment}</p>
                   )}
                 </td>
                 <td className="px-4 py-3">
-                  <span className="text-xs bg-slate-100 text-slate-600 rounded px-2 py-1">{req.component}</span>
+                  <span className="text-xs bg-slate-100 text-slate-600 rounded px-2 py-1">{req.component || '—'}</span>
                 </td>
                 <td className="px-4 py-3">
-                  <span className={`inline-flex items-center gap-1.5 text-xs font-medium rounded px-2 py-1 ${STATUS_CLASS[req.status]}`}>
-                    <Icon name={STATUS_ICON[req.status]} size={12} />
-                    {STATUS_LABELS[req.status]}
+                  <span className={`inline-flex items-center gap-1.5 text-xs font-medium rounded px-2 py-1 ${STATUS_CLASS[req.status as Status] || 'status-new'}`}>
+                    <Icon name={STATUS_ICON[req.status as Status] || 'Circle'} size={12} />
+                    {STATUS_LABELS[req.status as Status] || req.status}
                   </span>
                 </td>
                 <td className="px-4 py-3">
@@ -139,14 +143,14 @@ export default function ResultsTable({ requirements, onSelect }: ResultsTablePro
                     <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
                       <div
                         className={`h-full rounded-full transition-all duration-500
-                          ${req.matchPercent >= 90 ? 'bg-green-500' :
-                            req.matchPercent >= 60 ? 'bg-yellow-500' :
-                            req.matchPercent > 0 ? 'bg-blue-400' : 'bg-slate-300'}`}
-                        style={{ width: `${req.matchPercent}%` }}
+                          ${req.match_percent >= 90 ? 'bg-green-500' :
+                            req.match_percent >= 60 ? 'bg-yellow-500' :
+                            req.match_percent > 0 ? 'bg-blue-400' : 'bg-slate-300'}`}
+                        style={{ width: `${req.match_percent}%` }}
                       />
                     </div>
                     <span className="text-xs font-mono font-semibold w-8 text-right text-[hsl(var(--almi-navy))]">
-                      {req.matchPercent}%
+                      {req.match_percent}%
                     </span>
                   </div>
                 </td>

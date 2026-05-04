@@ -1,0 +1,12 @@
+{
+  "tests": [
+    {
+      "name": "Export requirements DB",
+      "method": "GET",
+      "path": "/",
+      "expectedStatus": 200,
+      "expectedBody": {"file_name": "requirements_db.xlsx"},
+      "bodyMatcher": "partial"
+    }
+  ]
+}
